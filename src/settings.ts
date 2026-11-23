@@ -13,6 +13,12 @@ export type Settings = {
   closeToTray: boolean;
   startMinimized: boolean;
   trayTimer: boolean;
+  autoHideTitlebar: boolean;
+  ringColor: string; // "phase" | "#hex" | "grad:<id>"
+  ringWidth: number;
+  bgOpacity: number; // 0..100
+  roundedCorners: boolean;
+  solidOnHover: boolean;
   theme: string;
   tickFocus: boolean;
   tickBreak: boolean;
@@ -35,6 +41,12 @@ export const DEFAULTS: Settings = {
   closeToTray: true,
   startMinimized: false,
   trayTimer: true,
+  autoHideTitlebar: true,
+  ringColor: "phase",
+  ringWidth: 9,
+  bgOpacity: 100,
+  roundedCorners: true,
+  solidOnHover: false,
   theme: "tokyo-night-storm",
   tickFocus: false,
   tickBreak: false,

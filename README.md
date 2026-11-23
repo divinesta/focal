@@ -15,7 +15,7 @@ bun install
 ```sh
 bun tauri dev      # dev window with hot reload
 bun tauri build    # .deb + AppImage in src-tauri/target/release/bundle/
-sudo apt install ./src-tauri/target/release/bundle/deb/Focal_0.1.0_amd64.deb
+sudo apt install ./src-tauri/target/release/bundle/deb/Focal_<version>_amd64.deb
 ```
 
 ## Why always-on-top works

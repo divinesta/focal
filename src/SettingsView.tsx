@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { DEFAULTS, type Phase, type Settings } from "./settings";
 import { THEMES } from "./themes";
+import { BG_PRESETS, GRADIENTS, SOLIDS, gradientCss } from "./appearance";
 import { chime } from "./sound";
 import { Icon } from "./icons";
 
@@ -10,7 +11,7 @@ type Tab = "timer" | "behaviour" | "themes" | "sounds" | "text" | "about";
 const TABS: { id: Tab; icon: string; title: string }[] = [
   { id: "timer", icon: "clock", title: "Timer" },
   { id: "behaviour", icon: "gear", title: "Behaviour" },
-  { id: "themes", icon: "palette", title: "Themes" },
+  { id: "themes", icon: "palette", title: "Appearance" },
   { id: "sounds", icon: "sound", title: "Sounds" },
   { id: "text", icon: "text", title: "Labels" },
   { id: "about", icon: "info", title: "About" },
@@ -61,6 +62,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export default function SettingsView({ settings: s, update }: Props) {
   const [tab, setTab] = useState<Tab>("timer");
   const [err, setErr] = useState("");
+  const presetSolid = SOLIDS.find((c) => c.color === s.ringColor);
+  const presetGrad = GRADIENTS.find((g) => `grad:${g.id}` === s.ringColor);
+  const isCustom = s.ringColor.startsWith("#") && !presetSolid;
+  const ringName = s.ringColor === "phase" ? "Phase colours — changes with focus / break"
+    : presetSolid?.name ?? (presetGrad ? `${presetGrad.name} gradient` : `Custom ${s.ringColor}`);
 
   const pickSound = (p: Phase, file: File | undefined) => {
     if (!file) return;
@@ -93,6 +99,8 @@ export default function SettingsView({ settings: s, update }: Props) {
           <Section title="Behaviour">
             <Toggle label="Always on top" value={s.alwaysOnTop} onChange={(v) => update({ alwaysOnTop: v })} />
             <Toggle label="Auto-start next phase" value={s.autoContinue} onChange={(v) => update({ autoContinue: v })} />
+            <Toggle label="Auto-hide title bar" hint="Shows when the cursor is over the window"
+              value={s.autoHideTitlebar} onChange={(v) => update({ autoHideTitlebar: v })} />
             <Toggle label="Desktop notifications" value={s.notifications} onChange={(v) => update({ notifications: v })} />
             <Toggle label="Show countdown in tray" value={s.trayTimer} onChange={(v) => update({ trayTimer: v })} />
             <Toggle label="Minimize to tray" value={s.minimizeToTray} onChange={(v) => update({ minimizeToTray: v })} />
@@ -103,7 +111,44 @@ export default function SettingsView({ settings: s, update }: Props) {
         )}
 
         {tab === "themes" && (
-          <Section title="Themes">
+          <Section title="Appearance">
+            <h3>Ring colour</h3>
+            <div className="swatches-grid">
+              <button className={`swatch phase ${s.ringColor === "phase" ? "sel" : ""}`} title="Phase colours (from theme)"
+                onClick={() => update({ ringColor: "phase" })} />
+              {SOLIDS.map((c) => (
+                <button key={c.color} className={`swatch ${s.ringColor === c.color ? "sel" : ""}`} title={c.name}
+                  style={{ background: c.color }} onClick={() => update({ ringColor: c.color })} />
+              ))}
+              {GRADIENTS.map((g) => (
+                <button key={g.id} className={`swatch ${s.ringColor === `grad:${g.id}` ? "sel" : ""}`} title={g.name}
+                  style={{ background: gradientCss(g.stops) }} onClick={() => update({ ringColor: `grad:${g.id}` })} />
+              ))}
+              <label className={`swatch custom ${isCustom ? "sel" : ""}`} title="Custom colour"
+                style={isCustom ? { background: s.ringColor } : undefined}>
+                +
+                <input type="color" value={isCustom ? s.ringColor : "#9ece6a"}
+                  onChange={(e) => update({ ringColor: e.target.value })} />
+              </label>
+            </div>
+            <p className="hint">{ringName}</p>
+            <Slider label="Thickness" value={s.ringWidth} min={3} max={16} unit="px" color="accent"
+              onChange={(v) => update({ ringWidth: v })} />
+
+            <h3>Background</h3>
+            <div className="chips">
+              {BG_PRESETS.map((b) => (
+                <button key={b.name} className={`chip ${s.bgOpacity === b.value ? "sel" : ""}`}
+                  onClick={() => update({ bgOpacity: b.value })}>{b.name}</button>
+              ))}
+            </div>
+            <Slider label="Opacity" value={s.bgOpacity} min={0} max={100} unit="%" color="accent"
+              onChange={(v) => update({ bgOpacity: v })} />
+            <Toggle label="Solid on hover" hint="Background fills in while the cursor is over it"
+              value={s.solidOnHover} onChange={(v) => update({ solidOnHover: v })} />
+            <Toggle label="Rounded corners" value={s.roundedCorners} onChange={(v) => update({ roundedCorners: v })} />
+
+            <h3>Theme</h3>
             <div className="themes">
               {THEMES.map((t) => (
                 <button key={t.id} className="theme" onClick={() => update({ theme: t.id })}
@@ -162,7 +207,7 @@ export default function SettingsView({ settings: s, update }: Props) {
         )}
 
         {tab === "about" && (
-          <Section title="Focal 0.1.0">
+          <Section title="Focal 0.2.0">
             <p className="about">A small focus timer with an always-on-top window that works on GNOME Wayland (it runs through XWayland).</p>
             <dl className="keys">
               <dt>Space</dt><dd>Start / pause</dd>

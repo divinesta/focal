@@ -5,6 +5,7 @@ import { chime, tick } from "./sound";
 import * as native from "./native";
 import { Icon } from "./icons";
 import SettingsView from "./SettingsView";
+import { resolveRing } from "./appearance";
 
 type Timer = {
   phase: Phase;
@@ -138,8 +139,27 @@ export default function App() {
   const C = 2 * Math.PI * R;
   const progress = Math.min(1, Math.max(0, remaining / total));
 
+  // ---- appearance ----
+  const ring = resolveRing(settings.ringColor);
+  const ringStroke = ring ? (ring.length > 1 ? "url(#ringGrad)" : ring[0]) : undefined;
+  // Settings stay readable even when the timer background is see-through.
+  const bgOp = view === "settings" ? Math.max(settings.bgOpacity, 94) : settings.bgOpacity;
+  const appClass = [
+    "app",
+    settings.autoHideTitlebar && "autohide",
+    settings.roundedCorners && "rounded",
+    settings.solidOnHover && "solidhover",
+    bgOp < 100 && "see-through",
+    bgOp < 35 && "clear",
+  ].filter(Boolean).join(" ");
+  const appStyle = {
+    "--bg-op": `${bgOp}%`,
+    "--ring-w": settings.ringWidth,
+    ...(ring ? { "--accent": ring[0] } : {}),
+  } as React.CSSProperties;
+
   return (
-    <div className="app" data-phase={timer.phase}>
+    <div className={appClass} style={appStyle} data-phase={timer.phase} data-view={view}>
       <header className="titlebar" data-tauri-drag-region>
         <button className="icon-btn" onClick={() => setView(view === "timer" ? "settings" : "timer")}
           title={view === "timer" ? "Settings (,)" : "Back (Esc)"}>
@@ -160,8 +180,15 @@ export default function App() {
           <div className="ring-wrap" data-tauri-drag-region>
           <div className="ring" onClick={toggle} title="Click to start / pause">
             <svg viewBox="0 0 240 240">
+              {ring && ring.length > 1 && (
+                <defs>
+                  <linearGradient id="ringGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="240" y2="240">
+                    {ring.map((c, i) => <stop key={i} offset={i / (ring.length - 1)} stopColor={c} />)}
+                  </linearGradient>
+                </defs>
+              )}
               <circle className="track" cx="120" cy="120" r={R} />
-              <circle className="bar" cx="120" cy="120" r={R}
+              <circle className="bar" cx="120" cy="120" r={R} style={ringStroke ? { stroke: ringStroke } : undefined}
                 strokeDasharray={C} strokeDashoffset={C * (1 - progress)} transform="rotate(-90 120 120)" />
             </svg>
             <div className="readout">
