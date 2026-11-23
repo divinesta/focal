@@ -1,0 +1,132 @@
+:root {
+  --bg: #24283b; --surface: #1f2335; --fg: #c0caf5; --muted: #565f89;
+  --focus: #9ece6a; --short: #7aa2f7; --long: #bb9af7;
+  --mono: "JetBrains Mono", "Fira Code", "Ubuntu Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body, #root { height: 100%; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 14px/1.4 "Inter", "Cantarell", "Ubuntu", system-ui, sans-serif;
+  overflow: hidden; user-select: none; -webkit-user-select: none;
+}
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+.app { height: 100%; display: flex; flex-direction: column; --accent: var(--focus); }
+.app[data-phase="short"] { --accent: var(--short); }
+.app[data-phase="long"] { --accent: var(--long); }
+
+/* title bar */
+.titlebar { display: flex; align-items: center; gap: 2px; padding: 8px 8px 4px; }
+.titlebar h1 { flex: 1; text-align: center; font-size: 17px; font-weight: 500; letter-spacing: .04em; color: var(--accent); transition: color .4s; }
+.icon-btn { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); transition: background .15s, color .15s; }
+.icon-btn:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); }
+.icon-btn.active { color: var(--accent); }
+
+/* timer */
+.timer { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: clamp(8px, 3vh, 18px); padding: 4px 16px clamp(10px, 3vh, 20px); }
+/* The ring gets whatever space is left after the controls and stays a circle at any window shape. */
+.ring-wrap { flex: 1; min-height: 0; width: 100%; display: grid; place-items: center; container-type: size; }
+.ring { position: relative; width: min(100cqw, 100cqh); aspect-ratio: 1; container-type: inline-size; }
+.ring svg { display: block; width: 100%; height: 100%; }
+.ring circle { fill: none; stroke-width: 9; }
+.ring .track { stroke: color-mix(in srgb, var(--muted) 45%, transparent); }
+.ring .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .25s linear, stroke .4s; }
+.readout { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; }
+/* Text scales with the ring (cqw = % of ring width), so it always fits inside it. */
+.time { font: 300 22cqw/1 var(--mono); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.phase { margin-top: 3cqw; font-size: clamp(10px, 6.5cqw, 16px); text-transform: uppercase; letter-spacing: .14em; color: var(--accent); transition: color .4s; }
+
+.controls { flex: none; display: flex; align-items: center; gap: 18px; }
+.rounds { flex: none; }
+.play { width: clamp(44px, 12vh, 58px); height: clamp(44px, 12vh, 58px); border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--accent); color: var(--accent); transition: background .15s, transform .1s; }
+.play:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.play:active { transform: scale(.94); }
+
+.rounds { display: flex; gap: 8px; padding: 4px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 50%, transparent); transition: background .3s; }
+.dot.done { background: var(--focus); }
+.dot.current { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* ---- Compact sizes: things drop away in stages as the window shrinks ---- */
+
+/* 1. Small: no round dots. */
+@media (max-height: 420px), (max-width: 300px) {
+  .rounds { display: none; }
+}
+
+/* 2. Smaller: slimmer title bar, no title text, only the play button. */
+@media (max-height: 300px), (max-width: 240px) {
+  .titlebar { padding: 4px 4px 0; }
+  .titlebar h1 { font-size: 0; }
+  .icon-btn { width: 28px; height: 28px; }
+  .icon-btn svg { width: 16px; height: 16px; }
+  .controls .icon-btn { display: none; }
+  .play { width: 38px; height: 38px; border-width: 1.5px; }
+  .play svg { width: 16px; height: 16px; }
+  .timer { gap: 6px; padding: 0 8px 8px; }
+}
+
+/* 3. Mini: just the ring. Title bar appears on hover, click the ring to start/pause. */
+@media (max-height: 200px), (max-width: 170px) {
+  .titlebar {
+    position: absolute; inset: 0 0 auto; z-index: 2; background: color-mix(in srgb, var(--bg) 85%, transparent);
+    opacity: 0; transition: opacity .15s;
+  }
+  .app:hover .titlebar { opacity: 1; }
+  .controls { display: none; }
+  .timer { padding: 6px; }
+  .ring .track, .ring .bar { stroke-width: 12; }
+}
+.ring { cursor: pointer; }
+
+/* settings */
+.settings { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.settings-body { flex: 1; overflow-y: auto; padding: 4px 16px 16px; }
+.settings-body::-webkit-scrollbar { width: 6px; }
+.settings-body::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 3px; }
+section h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); text-align: center; margin: 6px 0 14px; }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border-radius: 10px; background: var(--surface); }
+.row small { display: block; color: var(--muted); font-size: 12px; }
+.toggle { cursor: pointer; }
+.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle i { flex: none; width: 36px; height: 20px; border-radius: 10px; background: color-mix(in srgb, var(--muted) 55%, transparent); position: relative; transition: background .2s; }
+.toggle i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg); transition: transform .2s; }
+.toggle input:checked + i { background: var(--focus); }
+.toggle input:checked + i::after { transform: translateX(16px); background: var(--bg); }
+.toggle input:focus-visible + i { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+.slider { margin-bottom: 18px; }
+.slider-head { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.slider-head b { font: 500 13px var(--mono); color: var(--c); }
+.slider input { width: 100%; -webkit-appearance: none; appearance: none; height: 6px; border-radius: 3px; cursor: pointer;
+  background: linear-gradient(to right, var(--c) var(--p), color-mix(in srgb, var(--muted) 40%, transparent) var(--p)); }
+.slider input::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--c); border: 3px solid var(--bg); }
+
+.link { color: var(--accent); font-size: 13px; cursor: pointer; padding: 2px 4px; border-radius: 4px; }
+.link:hover { text-decoration: underline; }
+.settings-body > section > .link { display: block; margin: 0 auto; }
+.sound { flex-wrap: wrap; }
+.sound-actions { display: flex; gap: 6px; }
+.error { color: #f7768e; font-size: 13px; text-align: center; }
+
+.themes { display: flex; flex-direction: column; gap: 6px; }
+.theme { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 10px; border-left: 4px solid; text-align: left; }
+.theme span:first-child { flex: 1; }
+.swatches { display: flex; gap: 4px; }
+.swatches i { width: 10px; height: 10px; border-radius: 50%; }
+
+.field { display: block; margin-bottom: 14px; }
+.field span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+.field input { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid transparent; background: var(--surface); color: var(--fg); font: 14px var(--mono); outline: none; }
+.field input:focus { border-color: var(--accent); }
+
+.about { color: var(--muted); margin-bottom: 14px; text-align: center; }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 14px; margin: 0 auto 14px; width: fit-content; }
+.keys dt { font: 12px var(--mono); padding: 2px 8px; border-radius: 4px; background: var(--surface); text-align: center; }
+
+.tabs { display: flex; background: var(--surface); }
+.tabs button { flex: 1; height: 46px; display: grid; place-items: center; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs button:hover { color: var(--fg); }
+.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }

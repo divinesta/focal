@@ -1,0 +1,188 @@
+import { useState, type ReactNode } from "react";
+import { DEFAULTS, type Phase, type Settings } from "./settings";
+import { THEMES } from "./themes";
+import { chime } from "./sound";
+import { Icon } from "./icons";
+
+type Props = { settings: Settings; update: (p: Partial<Settings>) => void };
+type Tab = "timer" | "behaviour" | "themes" | "sounds" | "text" | "about";
+
+const TABS: { id: Tab; icon: string; title: string }[] = [
+  { id: "timer", icon: "clock", title: "Timer" },
+  { id: "behaviour", icon: "gear", title: "Behaviour" },
+  { id: "themes", icon: "palette", title: "Themes" },
+  { id: "sounds", icon: "sound", title: "Sounds" },
+  { id: "text", icon: "text", title: "Labels" },
+  { id: "about", icon: "info", title: "About" },
+];
+
+const PHASES: { id: Phase; name: string }[] = [
+  { id: "focus", name: "Focus" },
+  { id: "short", name: "Short break" },
+  { id: "long", name: "Long break" },
+];
+
+function Toggle({ label, hint, value, onChange }: { label: string; hint?: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="row toggle">
+      <span>
+        {label}
+        {hint && <small>{hint}</small>}
+      </span>
+      <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} />
+      <i />
+    </label>
+  );
+}
+
+function Slider({ label, value, min, max, unit, color, onChange }: {
+  label: string; value: number; min: number; max: number; unit?: string; color: string; onChange: (v: number) => void;
+}) {
+  return (
+    <div className="slider" style={{ "--c": `var(--${color})`, "--p": `${((value - min) / (max - min)) * 100}%` } as React.CSSProperties}>
+      <div className="slider-head">
+        <span>{label}</span>
+        <b>{value}{unit}</b>
+      </div>
+      <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+export default function SettingsView({ settings: s, update }: Props) {
+  const [tab, setTab] = useState<Tab>("timer");
+  const [err, setErr] = useState("");
+
+  const pickSound = (p: Phase, file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 3_000_000) return setErr("Keep custom sounds under 3 MB.");
+    setErr("");
+    const r = new FileReader();
+    r.onload = () => update({
+      sounds: { ...s.sounds, [p]: r.result as string },
+      soundNames: { ...s.soundNames, [p]: file.name },
+    });
+    r.readAsDataURL(file);
+  };
+
+  return (
+    <div className="settings">
+      <div className="settings-body">
+        {tab === "timer" && (
+          <Section title="Timer">
+            <Slider label="Focus" value={s.focusMin} min={1} max={90} unit=" min" color="focus" onChange={(v) => update({ focusMin: v })} />
+            <Slider label="Short break" value={s.shortMin} min={1} max={30} unit=" min" color="short" onChange={(v) => update({ shortMin: v })} />
+            <Slider label="Long break" value={s.longMin} min={1} max={60} unit=" min" color="long" onChange={(v) => update({ longMin: v })} />
+            <Slider label="Rounds before long break" value={s.rounds} min={1} max={12} color="fg" onChange={(v) => update({ rounds: v })} />
+            <button className="link" onClick={() => update({ focusMin: DEFAULTS.focusMin, shortMin: DEFAULTS.shortMin, longMin: DEFAULTS.longMin, rounds: DEFAULTS.rounds })}>
+              Reset defaults
+            </button>
+          </Section>
+        )}
+
+        {tab === "behaviour" && (
+          <Section title="Behaviour">
+            <Toggle label="Always on top" value={s.alwaysOnTop} onChange={(v) => update({ alwaysOnTop: v })} />
+            <Toggle label="Auto-start next phase" value={s.autoContinue} onChange={(v) => update({ autoContinue: v })} />
+            <Toggle label="Desktop notifications" value={s.notifications} onChange={(v) => update({ notifications: v })} />
+            <Toggle label="Show countdown in tray" value={s.trayTimer} onChange={(v) => update({ trayTimer: v })} />
+            <Toggle label="Minimize to tray" value={s.minimizeToTray} onChange={(v) => update({ minimizeToTray: v })} />
+            <Toggle label="Close to tray" hint="Quit from the tray menu" value={s.closeToTray} onChange={(v) => update({ closeToTray: v })} />
+            <Toggle label="Launch on login" value={s.autostart} onChange={(v) => update({ autostart: v })} />
+            <Toggle label="Start hidden in tray" value={s.startMinimized} onChange={(v) => update({ startMinimized: v })} />
+          </Section>
+        )}
+
+        {tab === "themes" && (
+          <Section title="Themes">
+            <div className="themes">
+              {THEMES.map((t) => (
+                <button key={t.id} className="theme" onClick={() => update({ theme: t.id })}
+                  style={{ background: t.bg, color: t.fg, borderLeftColor: t.focus }}>
+                  <span>{t.name}</span>
+                  <span className="swatches">
+                    {[t.focus, t.short, t.long].map((c) => <i key={c} style={{ background: c }} />)}
+                  </span>
+                  {s.theme === t.id && <Icon name="check" size={16} />}
+                </button>
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {tab === "sounds" && (
+          <Section title="Sounds">
+            <Slider label="Volume" value={Math.round(s.volume * 100)} min={0} max={100} unit="%" color="fg"
+              onChange={(v) => update({ volume: v / 100 })} />
+            <Toggle label="Tick during focus" value={s.tickFocus} onChange={(v) => update({ tickFocus: v })} />
+            <Toggle label="Tick during breaks" value={s.tickBreak} onChange={(v) => update({ tickBreak: v })} />
+            {PHASES.map((p) => (
+              <div key={p.id} className="row sound">
+                <span>
+                  <b>{p.name}</b> start sound
+                  <small>{s.soundNames[p.id] ?? "Built-in chime"}</small>
+                </span>
+                <div className="sound-actions">
+                  <button className="link" onClick={() => chime(p.id, s.sounds[p.id], s.volume)}>Test</button>
+                  <label className="link">
+                    Custom
+                    <input type="file" accept="audio/*" hidden onChange={(e) => pickSound(p.id, e.target.files?.[0])} />
+                  </label>
+                  {s.sounds[p.id] && (
+                    <button className="link" onClick={() => update({
+                      sounds: { ...s.sounds, [p.id]: null }, soundNames: { ...s.soundNames, [p.id]: null },
+                    })}>Default</button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {err && <p className="error">{err}</p>}
+          </Section>
+        )}
+
+        {tab === "text" && (
+          <Section title="Labels">
+            {PHASES.map((p) => (
+              <label key={p.id} className="field">
+                <span>{p.name} label</span>
+                <input value={s.labels[p.id]} maxLength={24}
+                  onChange={(e) => update({ labels: { ...s.labels, [p.id]: e.target.value } })} />
+              </label>
+            ))}
+          </Section>
+        )}
+
+        {tab === "about" && (
+          <Section title="Focal 0.1.0">
+            <p className="about">A small focus timer with an always-on-top window that works on GNOME Wayland (it runs through XWayland).</p>
+            <dl className="keys">
+              <dt>Space</dt><dd>Start / pause</dd>
+              <dt>S</dt><dd>Skip phase</dd>
+              <dt>R</dt><dd>Restart phase</dd>
+              <dt>,</dt><dd>Settings</dd>
+              <dt>Esc</dt><dd>Back to timer</dd>
+            </dl>
+            <p className="about">Double-click the round dots to reset to round 1.</p>
+          </Section>
+        )}
+      </div>
+
+      <nav className="tabs">
+        {TABS.map((t) => (
+          <button key={t.id} className={tab === t.id ? "active" : ""} onClick={() => setTab(t.id)} title={t.title}>
+            <Icon name={t.icon} />
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
