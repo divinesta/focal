@@ -19,6 +19,11 @@ export type Settings = {
   bgOpacity: number; // 0..100
   roundedCorners: boolean;
   solidOnHover: boolean;
+  breakScreen: boolean;
+  allowSkipBreak: boolean;
+  breakBg: string; // "none" | "builtin:<id>" | "custom:<id>"
+  breakDim: number; // 0..90
+  breakBlur: number; // px
   theme: string;
   tickFocus: boolean;
   tickBreak: boolean;
@@ -47,6 +52,11 @@ export const DEFAULTS: Settings = {
   bgOpacity: 100,
   roundedCorners: true,
   solidOnHover: false,
+  breakScreen: true,
+  allowSkipBreak: true,
+  breakBg: "builtin:misty-river",
+  breakDim: 45,
+  breakBlur: 0,
   theme: "tokyo-night-storm",
   tickFocus: false,
   tickBreak: false,

@@ -1,6 +1,6 @@
 [package]
 name = "focal"
-version = "0.2.0"
+version = "0.3.0"
 description = "A small always-on-top focus timer"
 edition = "2021"
 

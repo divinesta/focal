@@ -5,4 +5,7 @@ export default defineConfig({
   plugins: [react()],
   clearScreen: false,
   server: { port: 1420, strictPort: true, watch: { ignored: ["**/src-tauri/**"] } },
+  build: {
+    rollupOptions: { input: { main: "index.html", overlay: "overlay.html" } },
+  },
 });

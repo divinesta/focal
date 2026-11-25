@@ -6,6 +6,8 @@ import * as native from "./native";
 import { Icon } from "./icons";
 import SettingsView from "./SettingsView";
 import { resolveRing } from "./appearance";
+import { fmt } from "./format";
+import type { OverlayState } from "./overlayState";
 
 type Timer = {
   phase: Phase;
@@ -15,10 +17,6 @@ type Timer = {
   pristine: boolean; // not started yet in this phase
 };
 
-const fmt = (ms: number) => {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-};
 
 export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
@@ -27,6 +25,7 @@ export default function App() {
     phase: "focus", round: 1, remaining: durationMs(settings, "focus"), endAt: null, pristine: true,
   }));
   const [now, setNow] = useState(Date.now());
+  const [overlay, setOverlay] = useState<false | "break" | "preview">(false);
   const s = useRef(settings);
   s.current = settings;
 
@@ -64,6 +63,7 @@ export default function App() {
     const t = Date.now();
     setTimer({ phase: next, round: nextRound, remaining: dur, endAt: autoStart ? t + dur : null, pristine: !autoStart });
     setNow(t);
+    setOverlay(completed && next !== "focus" && cfg.breakScreen ? "break" : false);
     if (completed) {
       chime(next, cfg.sounds[next], cfg.volume);
       if (cfg.notifications) native.notify(`${cfg.labels[phase]} finished`, `Up next: ${cfg.labels[next]} (${fmt(dur)})`);
@@ -103,18 +103,77 @@ export default function App() {
     lastSec.current = secs;
   }, [secs]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- full-screen break window ----
+  const overlayState = (): OverlayState => {
+    const cfg = s.current;
+    const preview = overlay === "preview";
+    const ph: Phase = preview ? "short" : timer.phase;
+    return {
+      phase: ph,
+      label: cfg.labels[ph],
+      nextLabel: cfg.labels.focus,
+      endAt: preview ? null : timer.endAt,
+      remaining: preview ? durationMs(cfg, "short") : timer.remaining,
+      total: durationMs(cfg, ph),
+      allowSkip: cfg.allowSkipBreak,
+      preview,
+      theme: cfg.theme,
+      ringColor: cfg.ringColor,
+      ringWidth: cfg.ringWidth,
+      background: cfg.breakBg,
+      dim: cfg.breakDim,
+      blur: cfg.breakBlur,
+    };
+  };
+  const sendOverlay = useRef(overlayState);
+  sendOverlay.current = overlayState;
+
+  // Open / close: hide the small window while the break screen is up, bring it back after.
+  const mainWasVisible = useRef(true);
+  const prevOverlay = useRef(overlay);
+  useEffect(() => {
+    const was = prevOverlay.current;
+    prevOverlay.current = overlay;
+    if (!!was === !!overlay) return;
+    if (overlay) {
+      (async () => {
+        mainWasVisible.current = await native.isMainVisible();
+        native.sendOverlayState(sendOverlay.current());
+        await native.showOverlay();
+        native.hideWindow();
+      })();
+    } else {
+      native.hideOverlay();
+      if (mainWasVisible.current) native.showWindow();
+    }
+  }, [overlay]);
+
+  // Keep the break screen in sync (it ticks on its own from endAt, so only on real changes).
+  useEffect(() => {
+    if (overlay) native.sendOverlayState(sendOverlay.current());
+  }, [overlay, timer, settings]);
+
   // Tray label.
   const label = settings.labels[timer.phase];
   const trayText = settings.trayTimer && !timer.pristine ? `${fmt(remaining)} ${running ? label : "(paused)"}` : "";
   useEffect(() => { native.setTrayLabel(trayText); }, [trayText]);
 
   // Tray menu + keyboard shortcuts (refs so listeners always call the latest closures).
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
   const actions = useRef({ toggle, skip: () => advance(false), reset });
   actions.current = { toggle, skip: () => advance(false), reset };
   useEffect(() => {
     const offs = [
       native.onTrayEvent("tray-toggle", () => actions.current.toggle()),
       native.onTrayEvent("tray-skip", () => actions.current.skip()),
+      native.onOverlayAction((a) => {
+        const preview = overlayRef.current === "preview";
+        if (a === "ready") { if (overlayRef.current) native.sendOverlayState(sendOverlay.current()); }
+        else if (a === "dismiss" || preview) setOverlay(false);
+        else if (a === "toggle") actions.current.toggle();
+        else if (a === "skip") actions.current.skip();
+      }),
     ];
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest("input, textarea, select")) return;
@@ -129,6 +188,33 @@ export default function App() {
   }, []);
 
   useEffect(() => { document.title = trayText ? `${trayText} · Focal` : "Focal"; }, [trayText]);
+
+  // Pointer presence. CSS :hover gets stuck in WebKitGTK when the cursor leaves the window,
+  // so track it ourselves: show on movement, hide on leave/blur, and after 2s idle as a fallback.
+  const [hovering, setHovering] = useState(false);
+  useEffect(() => {
+    let idle: number | undefined;
+    const hide = () => { clearTimeout(idle); setHovering(false); };
+    const show = () => {
+      setHovering(true);
+      clearTimeout(idle);
+      idle = window.setTimeout(hide, 2000);
+    };
+    const onOut = (e: PointerEvent) => { if (!e.relatedTarget) hide(); };
+    window.addEventListener("pointermove", show);
+    window.addEventListener("pointerdown", show);
+    window.addEventListener("pointerout", onOut);
+    document.documentElement.addEventListener("mouseleave", hide);
+    window.addEventListener("blur", hide);
+    return () => {
+      clearTimeout(idle);
+      window.removeEventListener("pointermove", show);
+      window.removeEventListener("pointerdown", show);
+      window.removeEventListener("pointerout", onOut);
+      document.documentElement.removeEventListener("mouseleave", hide);
+      window.removeEventListener("blur", hide);
+    };
+  }, []);
 
   // ---- window buttons ----
   const onMinimize = () => (settings.minimizeToTray ? native.hideWindow() : native.minimizeWindow());
@@ -149,6 +235,7 @@ export default function App() {
     settings.autoHideTitlebar && "autohide",
     settings.roundedCorners && "rounded",
     settings.solidOnHover && "solidhover",
+    hovering && "hovering",
     bgOp < 100 && "see-through",
     bgOp < 35 && "clear",
   ].filter(Boolean).join(" ");
@@ -192,7 +279,7 @@ export default function App() {
                 strokeDasharray={C} strokeDashoffset={C * (1 - progress)} transform="rotate(-90 120 120)" />
             </svg>
             <div className="readout">
-              <div className="time">{fmt(remaining)}</div>
+              <div className={`time ${remaining > 3_600_000 - 1000 ? "long" : ""}`}>{fmt(remaining)}</div>
               <div className="phase">{label}</div>
             </div>
           </div>
@@ -213,7 +300,7 @@ export default function App() {
           </div>
         </main>
       ) : (
-        <SettingsView settings={settings} update={update} />
+        <SettingsView settings={settings} update={update} onPreviewBreak={() => setOverlay("preview")} />
       )}
     </div>
   );

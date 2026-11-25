@@ -1,6 +1,8 @@
 // Thin wrapper around Tauri APIs so the UI also runs in a plain browser (`bun run dev`).
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import type { OverlayAction, OverlayState } from "./overlayState";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
@@ -47,5 +49,34 @@ export async function notify(title: string, body: string) {
 export function onTrayEvent(name: "tray-toggle" | "tray-skip", cb: () => void) {
   if (!isTauri) return () => {};
   const p = listen(name, cb);
+  return () => void p.then((un) => un());
+}
+
+// ---- full-screen break window ----
+const overlayWin = () => WebviewWindow.getByLabel("overlay");
+
+export const isMainVisible = async () => (isTauri ? getCurrentWindow().isVisible().catch(() => true) : true);
+
+export const showOverlay = () => safe(async () => {
+  const w = await overlayWin();
+  if (!w) return;
+  await w.show();
+  await w.setFullscreen(true);
+  await w.setAlwaysOnTop(true);
+  await w.setFocus();
+});
+
+export const hideOverlay = () => safe(async () => {
+  const w = await overlayWin();
+  if (!w) return;
+  await w.setFullscreen(false);
+  await w.hide();
+});
+
+export const sendOverlayState = (st: OverlayState) => safe(() => emit("overlay-state", st));
+
+export function onOverlayAction(cb: (a: OverlayAction) => void) {
+  if (!isTauri) return () => {};
+  const p = listen<OverlayAction>("overlay-action", (e) => cb(e.payload));
   return () => void p.then((un) => un());
 }

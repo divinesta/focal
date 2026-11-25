@@ -15,6 +15,8 @@ const P: Record<string, string> = {
   text: "M5 6V4h14v2M12 4v16M9 20h6",
   info: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5h0",
   check: "M5 12l5 5 9-10",
+  screen: "M3 5h18v11H3zM8 20h8M12 16v4",
+  plus: "M12 5v14M5 12h14",
 };
 
 export function Icon({ name, size = 20, fill = false }: { name: keyof typeof P | string; size?: number; fill?: boolean }) {
