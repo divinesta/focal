@@ -1,7 +1,15 @@
 import type { Phase } from "./settings";
 
 let ctx: AudioContext | null = null;
-const ac = () => (ctx ??= new AudioContext());
+let idleTimer: number | undefined;
+/** Get a running AudioContext, and suspend it again shortly after the last sound. */
+const ac = () => {
+  ctx ??= new AudioContext();
+  if (ctx.state === "suspended") ctx.resume();
+  clearTimeout(idleTimer);
+  idleTimer = window.setTimeout(() => ctx?.suspend(), 3000);
+  return ctx;
+};
 
 /** Soft mechanical click, played once per second when ticking is on. */
 export function tick(volume: number) {

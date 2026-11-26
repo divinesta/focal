@@ -18,12 +18,45 @@ type Timer = {
 };
 
 
+const TIMER_KEY = "focal.timer.v1";
+
+/** Phase that follows `phase`, and its round number. */
+function nextPhase(phase: Phase, round: number, rounds: number): { next: Phase; nextRound: number } {
+  if (phase === "focus") return { next: round >= rounds ? "long" : "short", nextRound: round };
+  return { next: "focus", nextRound: phase === "long" ? 1 : round + 1 };
+}
+
+/** Restore the timer saved before the app was closed. */
+function loadTimer(cfg: Settings): Timer {
+  const fresh: Timer = { phase: "focus", round: 1, remaining: durationMs(cfg, "focus"), endAt: null, pristine: true };
+  try {
+    // Prefer the file the app saved (reliable across quits), then localStorage (browser/dev).
+    const injected = (window as unknown as { __FOCAL_TIMER__?: Timer | null }).__FOCAL_TIMER__;
+    const raw = injected ? null : localStorage.getItem(TIMER_KEY);
+    const t = injected ?? (raw ? (JSON.parse(raw) as Timer) : null);
+    if (!t) return fresh;
+    if (!["focus", "short", "long"].includes(t.phase)) return fresh;
+    const round = Math.min(Math.max(1, t.round), cfg.rounds);
+    if (t.endAt === null) return { ...t, round }; // paused: exactly as left
+    if (t.endAt > Date.now()) return { ...t, round }; // still counting: the clock kept going
+    // Finished while closed: move to the next phase, paused, so the user decides when to continue.
+    const { next, nextRound } = nextPhase(t.phase, round, cfg.rounds);
+    return { phase: next, round: nextRound, remaining: durationMs(cfg, next), endAt: null, pristine: true };
+  } catch {
+    return fresh;
+  }
+}
+
 export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [view, setView] = useState<"timer" | "settings">("timer");
-  const [timer, setTimer] = useState<Timer>(() => ({
-    phase: "focus", round: 1, remaining: durationMs(settings, "focus"), endAt: null, pristine: true,
-  }));
+  const [timer, setTimer] = useState<Timer>(() => loadTimer(settings));
+  // Save on every change (start, pause, phase switch). Cheap: a few dozen bytes, not per tick.
+  useEffect(() => {
+    const json = JSON.stringify(timer);
+    try { localStorage.setItem(TIMER_KEY, json); } catch {}
+    native.saveTimerFile(json);
+  }, [timer]);
   const [now, setNow] = useState(Date.now());
   const [overlay, setOverlay] = useState<false | "break" | "preview">(false);
   const s = useRef(settings);
@@ -42,22 +75,26 @@ export default function App() {
   const remaining = running ? timer.endAt! - now : timer.remaining;
   const total = durationMs(settings, timer.phase);
 
+  // Redraw once per displayed second, aligned to the second boundary (not on a fast interval).
   useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => setNow(Date.now()), 200);
-    return () => clearInterval(id);
-  }, [running]);
+    if (timer.endAt === null) return;
+    const endAt = timer.endAt;
+    let id: number;
+    const loop = () => {
+      const t = Date.now();
+      setNow(t);
+      const left = endAt - t;
+      if (left <= 0) return;
+      id = window.setTimeout(loop, (left % 1000 || 1000) + 5);
+    };
+    loop();
+    return () => clearTimeout(id);
+  }, [timer.endAt]);
 
   const advance = (completed: boolean) => {
     const cfg = s.current;
     const { phase, round } = timer;
-    let next: Phase;
-    let nextRound = round;
-    if (phase === "focus") next = round >= cfg.rounds ? "long" : "short";
-    else {
-      next = "focus";
-      nextRound = phase === "long" ? 1 : round + 1;
-    }
+    const { next, nextRound } = nextPhase(phase, round, cfg.rounds);
     const dur = durationMs(cfg, next);
     const autoStart = completed ? cfg.autoContinue : running;
     const t = Date.now();
@@ -104,6 +141,8 @@ export default function App() {
   }, [secs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- full-screen break window ----
+  const canReopen = timer.phase !== "focus" && !overlay;
+  const reopenBreak = () => { if (timer.phase !== "focus" && !overlayRef.current) setOverlay("break"); };
   const overlayState = (): OverlayState => {
     const cfg = s.current;
     const preview = overlay === "preview";
@@ -155,18 +194,21 @@ export default function App() {
 
   // Tray label.
   const label = settings.labels[timer.phase];
-  const trayText = settings.trayTimer && !timer.pristine ? `${fmt(remaining)} ${running ? label : "(paused)"}` : "";
+  // Tray text changes once a minute (each change is a native call + panel redraw).
+  const trayMin = Math.ceil(Math.max(0, remaining) / 60_000);
+  const trayText = settings.trayTimer && !timer.pristine ? `${trayMin}m ${running ? label : "(paused)"}` : "";
   useEffect(() => { native.setTrayLabel(trayText); }, [trayText]);
 
   // Tray menu + keyboard shortcuts (refs so listeners always call the latest closures).
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
-  const actions = useRef({ toggle, skip: () => advance(false), reset });
-  actions.current = { toggle, skip: () => advance(false), reset };
+  const actions = useRef({ toggle, skip: () => advance(false), reset, reopenBreak });
+  actions.current = { toggle, skip: () => advance(false), reset, reopenBreak };
   useEffect(() => {
     const offs = [
       native.onTrayEvent("tray-toggle", () => actions.current.toggle()),
       native.onTrayEvent("tray-skip", () => actions.current.skip()),
+      native.onTrayEvent("tray-break", () => actions.current.reopenBreak()),
       native.onOverlayAction((a) => {
         const preview = overlayRef.current === "preview";
         if (a === "ready") { if (overlayRef.current) native.sendOverlayState(sendOverlay.current()); }
@@ -180,6 +222,7 @@ export default function App() {
       if (e.code === "Space") { e.preventDefault(); actions.current.toggle(); }
       else if (e.key === "r") actions.current.reset();
       else if (e.key === "s") actions.current.skip();
+      else if (e.key === "b") actions.current.reopenBreak();
       else if (e.key === "Escape") setView("timer");
       else if (e.key === ",") setView("settings");
     };
@@ -187,7 +230,6 @@ export default function App() {
     return () => { offs.forEach((f) => f()); window.removeEventListener("keydown", onKey); };
   }, []);
 
-  useEffect(() => { document.title = trayText ? `${trayText} · Focal` : "Focal"; }, [trayText]);
 
   // Pointer presence. CSS :hover gets stuck in WebKitGTK when the cursor leaves the window,
   // so track it ourselves: show on movement, hide on leave/blur, and after 2s idle as a fallback.
@@ -291,6 +333,9 @@ export default function App() {
               <Icon name={running ? "pause" : "play"} size={22} fill />
             </button>
             <button className="icon-btn" onClick={() => advance(false)} title="Skip phase (S)"><Icon name="skip" fill /></button>
+            {canReopen && (
+              <button className="icon-btn" onClick={reopenBreak} title="Show break screen (B)"><Icon name="screen" /></button>
+            )}
           </div>
 
           <div className="rounds" onDoubleClick={resetAll} title="Round progress (double-click to reset)">

@@ -27,6 +27,7 @@ export const minimizeWindow = () => safe(() => getCurrentWindow().minimize());
 export const quit = () => (isTauri ? safe(() => invoke("quit_app")) : Promise.resolve(window.close()));
 export const setAlwaysOnTop = (v: boolean) => safe(() => getCurrentWindow().setAlwaysOnTop(v));
 export const setTrayLabel = (label: string) => safe(() => invoke("set_tray_label", { label }));
+export const saveTimerFile = (json: string) => safe(() => invoke("save_timer", { json }));
 
 export const syncAutostart = (want: boolean) => safe(async () => {
   const on = await isEnabled();
@@ -46,31 +47,48 @@ export async function notify(title: string, body: string) {
   });
 }
 
-export function onTrayEvent(name: "tray-toggle" | "tray-skip", cb: () => void) {
+export function onTrayEvent(name: "tray-toggle" | "tray-skip" | "tray-break", cb: () => void) {
   if (!isTauri) return () => {};
   const p = listen(name, cb);
   return () => void p.then((un) => un());
 }
 
 // ---- full-screen break window ----
-const overlayWin = () => WebviewWindow.getByLabel("overlay");
+// Created on demand and destroyed when closed, so its web process only exists during a break.
+const getOverlay = () => WebviewWindow.getByLabel("overlay");
 
 export const isMainVisible = async () => (isTauri ? getCurrentWindow().isVisible().catch(() => true) : true);
 
+async function ensureOverlay() {
+  const existing = await getOverlay();
+  if (existing) return existing;
+  const w = new WebviewWindow("overlay", {
+    url: "overlay.html",
+    title: "Focal break",
+    decorations: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    fullscreen: true,
+    focus: true,
+  });
+  await new Promise<void>((resolve, reject) => {
+    w.once("tauri://created", () => resolve());
+    w.once("tauri://error", (e) => reject(e.payload));
+  });
+  // Closed some other way (e.g. Alt+F4): tell the main window so its state stays in sync.
+  w.once("tauri://destroyed", () => emit("overlay-action", "dismiss"));
+  return w;
+}
+
 export const showOverlay = () => safe(async () => {
-  const w = await overlayWin();
-  if (!w) return;
-  await w.show();
-  await w.setFullscreen(true);
+  const w = await ensureOverlay();
   await w.setAlwaysOnTop(true);
   await w.setFocus();
 });
 
 export const hideOverlay = () => safe(async () => {
-  const w = await overlayWin();
-  if (!w) return;
-  await w.setFullscreen(false);
-  await w.hide();
+  const w = await getOverlay();
+  if (w) await w.destroy();
 });
 
 export const sendOverlayState = (st: OverlayState) => safe(() => emit("overlay-state", st));

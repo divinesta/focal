@@ -293,12 +293,13 @@ export default function SettingsView({ settings: s, update, onPreviewBreak }: Pr
         )}
 
         {tab === "about" && (
-          <Section title="Focal 0.3.0">
+          <Section title="Focal 0.4.1">
             <p className="about">A small focus timer with an always-on-top window that works on GNOME Wayland (it runs through XWayland).</p>
             <dl className="keys">
               <dt>Space</dt><dd>Start / pause</dd>
               <dt>S</dt><dd>Skip phase</dd>
               <dt>R</dt><dd>Restart phase</dd>
+              <dt>B</dt><dd>Show break screen (during a break)</dd>
               <dt>,</dt><dd>Settings</dd>
               <dt>Esc</dt><dd>Back to timer</dd>
             </dl>

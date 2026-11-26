@@ -33,8 +33,7 @@ export default function Overlay() {
         remaining: 0, total: 5 * 60_000, allowSkip: true, preview: false, theme: q.get("theme") ?? "tokyo-night-storm",
         ringColor: "phase", ringWidth: 9, background: q.get("bg") ?? "builtin:misty-river", dim: 40, blur: 0 });
       applyTheme(q.get("theme") ?? "tokyo-night-storm");
-      const id = setInterval(() => setNow(Date.now()), 250);
-      return () => clearInterval(id);
+      return;
     }
     const un = listen<OverlayState>("overlay-state", (e) => {
       setSt(e.payload);
@@ -42,14 +41,29 @@ export default function Overlay() {
       applyTheme(e.payload.theme);
     });
     act("ready"); // ask the main window for the current state
-    const id = setInterval(() => setNow(Date.now()), 250);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") act("dismiss");
       else if (e.code === "Space") { e.preventDefault(); act("toggle"); }
     };
     window.addEventListener("keydown", onKey);
-    return () => { un.then((f) => f()); clearInterval(id); window.removeEventListener("keydown", onKey); };
+    return () => { un.then((f) => f()); window.removeEventListener("keydown", onKey); };
   }, []);
+
+  // Redraw once per displayed second while the break runs.
+  useEffect(() => {
+    const endAt = st?.endAt;
+    if (endAt == null) return;
+    let id: number;
+    const loop = () => {
+      const t = Date.now();
+      setNow(t);
+      const left = endAt - t;
+      if (left <= 0) return;
+      id = window.setTimeout(loop, (left % 1000 || 1000) + 5);
+    };
+    loop();
+    return () => clearTimeout(id);
+  }, [st?.endAt]);
 
   // Load the background image when the choice changes.
   useEffect(() => {

@@ -17,6 +17,8 @@
     "notification:default",
     "autostart:default",
     "core:window:allow-set-fullscreen",
-    "core:window:allow-is-visible"
+    "core:window:allow-is-visible",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-destroy"
   ]
 }

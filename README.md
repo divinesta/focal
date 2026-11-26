@@ -1,33 +1,68 @@
 # Focal
 
-A small focus timer (Tauri 2 + React) with an always-on-top window that works on GNOME Wayland.
+A small focus timer for Linux that stays on top of your other windows. Work in focus rounds, and when one ends a full-screen break screen reminds you to step away.
 
-## One-time setup
+<p>
+  <img src="docs/timer.png" alt="Focal timer window" height="300">
+  &nbsp;
+  <img src="docs/break-screen.jpg" alt="Full-screen break screen" height="300">
+</p>
+
+## Install
+
+**Ubuntu, Debian, Linux Mint, Pop!_OS**
+
+```sh
+wget https://github.com/divinesta/focal/releases/latest/download/focal_amd64.deb
+sudo apt install ./focal_amd64.deb
+```
+
+Then open **Focal** from your app menu.
+
+**Any other Linux (AppImage)**
+
+```sh
+wget https://github.com/divinesta/focal/releases/latest/download/focal_amd64.AppImage
+chmod +x focal_amd64.AppImage
+./focal_amd64.AppImage
+```
+
+**Uninstall:** `sudo apt remove focal`
+
+## Features
+
+- **Always on top**, including on GNOME Wayland, where most apps can't do this
+- Focus, short break and long break rounds, with focus blocks up to 4 hours
+- **Full-screen break screen** with photo backgrounds, or add your own pictures
+- Countdown in the system tray, desktop notifications, sounds
+- 14 themes, custom ring colours and gradients, see-through background
+- Shrinks down to a tiny ring, and the title bar hides when you're not using it
+- The timer survives quitting and restarting
+- Keyboard shortcuts: `Space` start/pause, `S` skip, `R` restart, `B` show break screen
+
+## Performance
+
+Measured on Ubuntu 26.04 (Intel laptop), Focal 0.4.1:
+
+| | Timer paused | Timer running |
+|---|---|---|
+| Memory (PSS, all processes) | ~158 MB | ~164 MB |
+| CPU (share of one core) | ~0.03% | ~1.1% |
+| Download size (`.deb`) | 6.5 MB | |
+
+Most of the memory is WebKitGTK, the web engine Linux uses to draw the window. Focal's own code is a small part of it.
+
+## Build from source
+
+You need [Rust](https://rustup.rs), [Bun](https://bun.sh) and the Tauri system libraries:
 
 ```sh
 sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # then open a new terminal
 bun install
+bun tauri dev      # run with hot reload
+bun tauri build    # installers end up in src-tauri/target/release/bundle/
 ```
 
-## Run / build
+Built with [Tauri 2](https://tauri.app) and React.
 
-```sh
-bun tauri dev      # dev window with hot reload
-bun tauri build    # .deb + AppImage in src-tauri/target/release/bundle/
-sudo apt install ./src-tauri/target/release/bundle/deb/Focal_<version>_amd64.deb
-```
-
-## Why always-on-top works
-
-GNOME on Wayland ignores "keep me on top" requests from apps. `src-tauri/src/main.rs` sets
-`GDK_BACKEND=x11` before startup so the window runs through XWayland, where the request works.
-Run with `FOCAL_WAYLAND=1` to opt out.
-
-## Layout
-
-- `src/App.tsx` – timer engine (wall-clock based, no drift), ring, tray/keyboard wiring
-- `src/SettingsView.tsx` – Timer / Behaviour / Themes / Sounds / Labels / About tabs
-- `src/themes.ts` – add a theme = add one line
-- `src/sound.ts` – built-in chimes and tick (Web Audio), custom files
-- `src-tauri/src/lib.rs` – tray menu, tray countdown label, plugins
+Background photos are from [Unsplash](https://unsplash.com), via [Lorem Picsum](https://picsum.photos), under the Unsplash License.
